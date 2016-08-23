@@ -7,6 +7,18 @@ the users wishes to avail the benefit, such as, normal login.
 
 I am still wokring on figuring out the details. 
 
+### POC branch details:
+>1. executing python files into exes requires downloading nuitka
+>2. `wrongPass.py` and `rightPass.py` work with a directory that isn't here.
+	mySecretDir/logFile.txt
+	mySecretDir/hashFile.txt
+	mySecretDir/shortTermFile.txt
+which all have only root-access (R and W)
+
+It was more of a POF, it isn't yet integrated into one file (which it might),
+the idea was that ms_authenticate would call the relevent exe
+	
+
 ### Requirements
 
 Assuming you have `make` and `gcc`, additionally you have to
