@@ -1,0 +1,15 @@
+#!/bin/bash
+
+program="pam_typotolerant"
+echo "compiling $program.py:"
+nuitka --standalone "$program.py" 
+# ******************************************************
+#                        MISSING:
+# ADD a changing ot permission for the created directory
+# ******************************************************
+
+directory="$program.dist"
+exePath="$directory/$program.exe"
+echo "changing permissions for $exePath:"
+sudo chown root "$exePath"
+sudo chmod u+s "$exePath"
