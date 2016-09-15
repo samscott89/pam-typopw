@@ -37,8 +37,6 @@ waitlistT = 'Waitlist'
 # table col: base64(enc(json(typo, ts, hash, salt, entropy)))'
 auxT = 'AuxSysData' # holds system's setting as well as glob_salt and enc(pw)
 # table cols: desc, data
-#             pk, pk_salt, ctx
-# TODO - maybe we should have the ctx data in 'data'
 
 # auxiley info 'desc's:
 AllowedTypoLogin = "AllowedTypoLogin"
@@ -48,6 +46,12 @@ InstallDate = "InstallDate"
 CacheSize = "CacheSize"
 # PwAcceptPolicy = "PwAcceptPolicy"   # not yet implemented
 EditCutoff = "EditCutoff"  # The edit from which (included) it's too far
+PW_PK = "pw pk"
+PW_PK_SALT = "pw pk salt"
+REL_ENTR_BOUND = "relative entropy lower bound"
+R_E_B = -3
+OBJ_ENTR_BOUND = "objective entropy lower bound"
+O_E_B = -1
 
 #log col:
 rel_bit_strength = 'rel_bit_str'
@@ -83,21 +87,18 @@ class UserTypoDB:
             handler.setFormatter(formatter)
             logger.addHandler(handler)
         
-##        logger.basicConfig(filename=self.get_logging_path(user),
-##                            format='%(asctime)s + %(levelname)s + %(message)s',
-##                            level=log_level)
         if debug_mode: # TODO REMOVE
             print "should log" # TODO REMOVE
         logger.debug("{} created".format(str(self)))
         
         info_t = self.getDB()[auxT]
         dataLine_N = info_t.find_one(desc = CacheSize)
-        #if dataLineN != None: # TODO REMOVE
+
         if dataLine_N:
             self.N = int(dataLine_N['data'])
             logger.debug(" N, {}'s size is {}".format(hashCacheT,self.N))
         dataLine_IsON = info_t.find_one(desc=AllowedTypoLogin)
-        #if dataLine_IsON != None: # TODO REMOVE
+        
         if dataLine_IsON:
             self.isON = dataLine_IsON['data'] == 'True'
             active = "ON"
@@ -119,11 +120,11 @@ class UserTypoDB:
     
     def get_DB_path(self, username):
         homedir = pwd.getpwnam(username).pw_dir
-        return "{}/{}.db".format(homedir, DB_NAME)
+        return "{}/.{}.db".format(homedir, DB_NAME)
 
     def get_logging_path(self,username):
         homedir = pwd.getpwnam(username).pw_dir
-        return "{}/{}.log".format(homedir,DB_NAME)
+        return "{}/.{}.log".format(homedir,DB_NAME)
 
     
 
@@ -222,7 +223,6 @@ class UserTypoDB:
         pw_hash, pw_pk = derive_public_key(pw, pw_salt_pk)
 
         glob_salt_hmac = os.urandom(16)
-        self.glob_salt_tmp = glob_salt_hmac # TODO REMOVE
 
         pw_salt_base64 = binascii.b2a_base64(pw_salt_pk)
 
@@ -235,10 +235,20 @@ class UserTypoDB:
         glob_salt_cipher = binascii.b2a_base64(encrypt(pk_dict, glob_salt_hmac))
 
         # TODO - change it to be 'data' instead of 'ctx'
-        info_t.insert(dict(ctx=pw_json_cipher, pk=pw_pk, pk_salt=pw_salt_base64,
-                           desc=ORG_PW))
-        info_t.insert(dict(ctx=glob_salt_cipher, desc=GLOB_SALT))
+        #info_t.insert(dict(ctx=pw_json_cipher, pk=pw_pk, pk_salt=pw_salt_base64,
+        #                   desc=ORG_PW))
+        info_t.insert(dict(data=pw_json_cipher, desc=ORG_PW))
+        info_t.insert(dict(data=pw_pk, desc=PW_PK))
+        info_t.insert(dict(data=pw_salt_base64, desc=PW_PK_SALT))
+        info_t.insert(dict(data=glob_salt_cipher, desc=GLOB_SALT))
         logger.debug("Pw and glob salt inserted successfully")
+
+        # initiating entropy bound
+        info_t.insert(dict(desc=REL_ENTR_BOUND,data=str(R_E_B)))
+        info_t.insert(dict(desc=OBJ_ENTR_BOUND,data=str(O_E_B)))
+        logger.debug("Relative ({}) and Objective ({}) entropy bound had been set".format(
+            R_E_B,O_E_B))
+        
         logger.info("TypoToler initiated succesfully")
         return
         
@@ -373,17 +383,20 @@ class UserTypoDB:
         # original pw's pk
         logger.debug("Getting from {}".format(auxT))
         info_t = db[auxT]
-        pw_info = info_t.find(desc=ORG_PW)
-        count = 0
-        for line in pw_info:
-            # pw_pk = binascii.a2b_base64(line['pk'])
-            pw_pk = line['pk']
-            logger.debug("Got {}'s pk:{}".format(ORG_PW,pw_pk))
-            dic[ORG_PW] = pw_pk
-            count += 1
+        pw_pk = info_t.find_one(desc=PW_PK)['data']
+        logger.debug("Got {}'s pk:{}".format(ORG_PW,pw_pk))
+        dic[ORG_PW] = pw_pk
+        
+        #count = 0 # TODO REMOVE
+        # for line in pw_info:
+        #     # pw_pk = binascii.a2b_base64(line['pk'])
+        #     pw_pk = line['pk']
+        #    logger.debug("Got {}'s pk:{}".format(ORG_PW,pw_pk))
+        #    dic[ORG_PW] = pw_pk
+        #    count += 1
 
-        if count != 1:
-            raise ValueError("{} pws in aux table, instead of 1".format(count))
+        #if count != 1: # TODO REMOVE
+        #    raise ValueError("{} pws in aux table, instead of 1".format(count))
         logger.debug("The pk dictionary was drawn successfully")
         return dic
 
@@ -512,8 +525,11 @@ class UserTypoDB:
                                     isTop5Fixes, 'False', 'False')
 
             closeEdit = editDist <= maxEditDist
-            notMuchWeaker = rel_typo_str >= -3 # TODO change to be 3 from aux
-            notTooWeak = typo_ent >= 16        # TODO change to be 16 from aux
+            
+            rel_bound = int(self.getDB()[auxT].find_one(desc=REL_ENTR_BOUND)['data'])
+            obj_bound = int(self.getDB()[auxT].find_one(desc=OBJ_ENTR_BOUND)['data'])
+            notMuchWeaker = rel_typo_str >= rel_bound # TODO change to be 3 from aux
+            notTooWeak = typo_ent >= obj_bound        # TODO change to be 16 from aux
             # and to be "True" if not found in aux
             
             if  closeEdit and notMuchWeaker and notTooWeak: # TODO CHANGE !
@@ -553,10 +569,10 @@ class UserTypoDB:
                          "instead of 1, 1 - in {}".format(auxT))
 
     def get_pw_pk_salt(self):
-        pk_salt_base64 =  self.getDB()[auxT].find_one(desc=ORG_PW)
+        pk_salt_base64 =  self.getDB()[auxT].find_one(desc=PW_PK_SALT)
         assert pk_salt_base64, \
             "pk_salt_base64={!r}. It should not be None.".format(pk_salt_base64)
-        return binascii.a2b_base64(pk_salt_base64['pk_salt'])
+        return binascii.a2b_base64(pk_salt_base64['data'])
 
     def get_org_pw(self, t_h_id, t_sk):
         '''
@@ -569,7 +585,7 @@ class UserTypoDB:
         logger.debug("Getting original pw")
         pwLine = self.getDB()[auxT].find_one(desc=ORG_PW)
         # ctx is in base64, so we need to decode it
-        pw_ctx = binascii.a2b_base64(pwLine['ctx'])
+        pw_ctx = binascii.a2b_base64(pwLine['data'])
         jsn_str = decrypt({t_h_id: t_sk}, pw_ctx)
         pw_json = json.loads(jsn_str)
         logger.debug("Fetched original password successfully")
@@ -582,7 +598,7 @@ class UserTypoDB:
         # logger = logging.getLogger(LOGGER_NAME)
         logger.debug("Getting globl hmac salt")
         saltLine = self.getDB()[auxT].find_one(desc = GLOB_SALT)
-        salt_ctx = binascii.a2b_base64(saltLine['ctx'])
+        salt_ctx = binascii.a2b_base64(saltLine['data'])
         logger.debug("Fetched global salt successfully")
         return salt_ctx
 
@@ -651,8 +667,8 @@ class UserTypoDB:
         # logger = logging.getLogger(LOGGER_NAME)
         logger.info("Updating aux ctx")
         infoT = self.getDB()[auxT]
-        pwCtx = binascii.a2b_base64(infoT.find_one(desc=ORG_PW)['ctx'])
-        globSaltCtx = binascii.a2b_base64(infoT.find_one(desc=GLOB_SALT)['ctx'])
+        pwCtx = binascii.a2b_base64(infoT.find_one(desc=ORG_PW)['data'])
+        globSaltCtx = binascii.a2b_base64(infoT.find_one(desc=GLOB_SALT)['data'])
         pk_dict = self.get_approved_pk_dict()
         pk_dict2 = deepcopy(pk_dict) # or we could just recall 'get_approved_pk_dict'
         # the reason for the double copy is that encrypt changes the given dict
@@ -661,8 +677,8 @@ class UserTypoDB:
         newPwCtx = binascii.b2a_base64(update_ctx(pk_dict, sk_dict, pwCtx))
         newGlobSaltCtx = binascii.b2a_base64(update_ctx(pk_dict2,
                                                         sk_dict, globSaltCtx))
-        infoT.update(dict(desc=ORG_PW, ctx=newPwCtx),['desc'])
-        infoT.update(dict(desc=GLOB_SALT, ctx=newGlobSaltCtx),['desc'])
+        infoT.update(dict(desc=ORG_PW, data=newPwCtx),['desc'])
+        infoT.update(dict(desc=GLOB_SALT, data=newGlobSaltCtx),['desc'])
 
         logger.debug("Aux ctx updated successfully")
         

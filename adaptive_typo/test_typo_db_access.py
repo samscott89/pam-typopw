@@ -43,10 +43,10 @@ def test_login_settings():
     assert typoDB.is_allowed_login()
     
 def test_added_to_hash(isStandAlone = True):
+    # INCLUDE TYPOS OF t1,t3,t5
     typoDB = start_DB()
     typoDB.add_typo_to_waitlist(t_1())
     typoDB.add_typo_to_waitlist(t_1())
-    # typoDB.add_typo_to_waitlist(t_2())
     typoDB.add_typo_to_waitlist(t_5())
     typoDB.add_typo_to_waitlist(t_3())
     assert len(typoDB.getDB()[waitlistT]) == 4
@@ -57,10 +57,10 @@ def test_added_to_hash(isStandAlone = True):
     _, t1_h, isIn_t1 = typoDB.fetch_from_cache(t_1(), False, False)
     assert isIn_t1
     assert hash_t.count(H_typo=t1_h) == 1
-    #_, t2_h, isIn_t2 = typoDB.fetch_from_cache(t_2(), False, False)
     _, t5_h, isIn_t5 = typoDB.fetch_from_cache(t_5(), False, False)
     assert isIn_t5
     assert hash_t.count(H_typo=t5_h) == 1
+    assert len(hash_t) == 2
     if isStandAlone:
         remove_DB()
     else:
@@ -81,11 +81,6 @@ def test_alt_typo(isStandAlone = True):
     pk = typo_hash_line['pk']
     salt = typo_hash_line['salt']
     assert isIn_t1
-##    print isIn_t1
-##    print " t1_sk:{}\n t1_h:{}\n pk:{}\n salt:{}".format(str(t1_sk),
-##                                                         t1_h, pk,
-##                                                         salt)
-##    print "^^^^^^"
     typoDB.update_hash_cache_by_waitlist(t1_h,t1_sk)
     assert len(hash_t) == count+1
     if isStandAlone:
@@ -120,8 +115,80 @@ def test_many_entries(isStandAlone = True):
     else:
         return typoDB
     
-    
+def test_repeated_pw_use(isStandAlone = True):
+    typoDB = start_DB()
 
+    BIG = 60
+    
+    for typ in listOfOneDist(BIG):
+        typoDB.add_typo_to_waitlist(typ)
+        typoDB.original_password_entered(get_pw())
+    
+    if isStandAlone:
+        remove_DB()
+    else:
+        return typoDB
+
+def test_some_more(isStandAlone = True):
+    # in the end INCLUDE TYPOS:
+    # 1,2,4,5
+    typoDB = test_added_to_hash(False)
+    hash_t = typoDB.getDB()['HashCache']
+    # typo 1 and 5 already in
+    typoDB.original_password_entered(get_pw())
+    typoDB.fetch_from_cache(t_1())
+    typoDB.original_password_entered(get_pw())
+    typoDB.add_typo_to_waitlist(t_2())
+    typoDB.original_password_entered(get_pw())
+    t2_sk,t2_h_id,is_t2_in = typoDB.fetch_from_cache(t_1(),False,False)
+    assert is_t2_in # only if caps lock is considered as 1 dist
+    typoDB.add_typo_to_waitlist(t_4())
+    typoDB.add_typo_to_waitlist(t_6()) # shouldn't enter
+    typoDB.update_hash_cache_by_waitlist(t2_h_id,t2_sk)
+    for aa in hash_t.all():
+        print aa
+    assert (len(hash_t) == 4) # typos 1,2,4,5
+    
+    if isStandAlone:
+        remove_DB()
+    else:
+        return typoDB    
+
+def test_cache_policy(isStandAlone = True):
+    # might fail under extreamly low probabiliy
+    # ********* VERY HEAVY ***************
+    typoDB = test_some_more(False)
+    # typoDB include typos 1,2,4,5
+    hash_t = typoDB.getDB()['HashCache']
+    BIG = 60
+    assert BIG >= NN  # to make sure we're trying to add enough times
+
+    t1_sk,t1_h_id,t1_is_in = typoDB.fetch_from_cache(t_1(),False,False)
+    assert t1_is_in
+##    count_
+    REALLY_BIG = 
+    count = 0
+    for ii in range(REALLY_BIG):
+        for typo in listOfOneDist(BIG):
+            # while the typo isn't in the cach yet
+            t_sk,t_h_id,typo_is_in = typoDB.fetch_from_cache(typo,False,False)
+            #while not typoDB.fetch_from_cache(typo,False,False)[2]:
+            print t_sk,t_h_id,typo_is_in
+            while not typo_is_in:
+                typoDB.add_typo_to_waitlist(typo)
+                typoDB.original_password_entered(get_pw())
+                count += 1
+                t_sk,t_h_id,typo_is_in = typoDB.fetch_from_cache(typo,False,False)
+                
+    t1_sk,t1_h_id,t1_is_in = typoDB.fetch_from_cache(t_1(),False,False)
+    assert not t1_is_in
+
+    if isStandAlone:
+        remove_DB()
+    else:
+        return typoDB
+
+    
 def get_pw():
     return 'GoldApp&3'
 
@@ -153,6 +220,7 @@ def listOfOneDist(length):
     ll = []
     # using only lower letters
     # to avoid shift --> 2 edit dist
+    # insert the new char between existing chars
     m = ord('a')
     M = ord('z') + 1 - m
     for ii in range(length):
@@ -166,15 +234,4 @@ def listOfOneDist(length):
     
 
 # "main"
-##print str(listOfOneDist(60))
-##print get_username()
-##print DB_path()
-##print str(start_DB())
-# print "************* test_login_settings ******************"
-# test_login_settings()
-# print "************* test_added_to_hash ******************"
-# test_added_to_hash()
-# print "************* test_many_entries ******************"
-# test_many_entries()
-print "************* test_alt_typo ******************"
-test_alt_typo(False)
+test_some_more()
