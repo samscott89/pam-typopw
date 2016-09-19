@@ -22,7 +22,7 @@ from random import random # maybe something else?
 LOGGER_NAME = "typoToler"
 DB_NAME = "typoToler"
 ORG_PW = 'org_pw'       # original password's t_id
-GLOB_SALT = 'glob_saltupda'   # global salt's t_id
+GLOB_SALT = 'glob_salt'   # global salt's t_id
 END_OF_SESS = 'END OF SESSION' # for log's use
 
 # Tables' names:
@@ -41,6 +41,10 @@ auxT = 'AuxSysData' # holds system's setting as well as glob_salt and enc(pw)
 # auxiley info 'desc's:
 AllowedTypoLogin = "AllowedTypoLogin"
 InstallDate = "InstallDate"
+InstallationID = "Install_id"
+LastSent="Last_sent"
+SendEvery="SendEvery(sec)"
+UPDATE_GAPS= 24 * 60 * 60 # 24 hours, in seconds
 # LastPwChange = "LastPwChange"  # not yet implemented
 # PwTypoPolicy = "PwTypoPolicy"  # not yet implemented
 CacheSize = "CacheSize"
@@ -87,8 +91,6 @@ class UserTypoDB:
             handler.setFormatter(formatter)
             logger.addHandler(handler)
         
-        if debug_mode: # TODO REMOVE
-            print "should log" # TODO REMOVE
         logger.debug("{} created".format(str(self)))
         
         info_t = self.getDB()[auxT]
@@ -113,13 +115,13 @@ class UserTypoDB:
         """
         # logger = logging.getLogger(LOGGER_NAME)
         if not self.DB_obj:
-            self.DB_obj = dataset.connect("sqlite:////home/{}/{}.db"\
-                               .format(self.user, DB_NAME))
+            db_path = self.get_DB_path()
+            self.DB_obj = dataset.connect("sqlite:///{}".format(db_path))
             logger.info("connected to DB")
         return self.DB_obj
     
-    def get_DB_path(self, username):
-        homedir = pwd.getpwnam(username).pw_dir
+    def get_DB_path(self):
+        homedir = pwd.getpwnam(self.user).pw_dir
         return "{}/.{}.db".format(homedir, DB_NAME)
 
     def get_logging_path(self,username):
@@ -183,13 +185,17 @@ class UserTypoDB:
         hashCache size, the global salt etc.
 
         """
+        if self.is_typotoler_init():
+            raise RuntimeError("TypoDB was initialized after it had been initialized already")
+        
         # logger = logging.getLogger(LOGGER_NAME)
         logger.info("initiating typoToler")
+        # making sure the DB's permisions are RW for user only
         username = self.user
         u_data = pwd.getpwnam(username)
         u_id = u_data.pw_uid
         g_id = u_data.pw_gid
-        db_path = self.get_DB_path(username)
+        db_path = self.get_DB_path()
         os.chown(db_path, u_id, g_id)  # change owner to user
         os.chmod(db_path, 0600)  # rw only for owner
         # self.init_tables(pw, N)
@@ -248,15 +254,27 @@ class UserTypoDB:
         info_t.insert(dict(desc=OBJ_ENTR_BOUND,data=str(O_E_B)))
         logger.debug("Relative ({}) and Objective ({}) entropy bound had been set".format(
             R_E_B,O_E_B))
+        # installation ID
+        install_id = binascii.b2a_base64(os.urandom(16))
+        info_t.insert(dict(desc=InstallationID,data=install_id))
+        logger.debug("Installation ID initiated")
+        # time parameters
+        install_time = time.strftime('%Y-%m-%d %H:%M:%S',time.localtime())
+        last_sent_time = self.get_time_str()
+        info_t.insert(dict(desc=InstallDate,data=install_time))
+        info_t.insert(dict(desc=LastSent,data=last_sent_time))
+        info_t.insert(dict(desc=SendEvery,data=str(UPDATE_GAPS)))
+        logger.debug("Time parameters have been set")
         
         logger.info("TypoToler initiated succesfully")
         return
-        
+
+    # TODO -- remove and leave is_allowed_login
     def is_typotoler_on(self):
         dataLine = self.getDB()[auxT].find_one(desc=AllowedTypoLogin)
         if not dataLine:
             return False
-        return bool(dataLine['data'])
+        return dataLine['data'] == 'True'
         
     def is_in_top_5_fixes(self, orig_pw, typo):
         return orig_pw in (typo.capitalize(),
@@ -266,6 +284,36 @@ class UserTypoDB:
                            typo[1:],
                            typo[:-1])
 
+    def get_last_unsent_logs_iter(self):
+        """
+        Check what was the last time the log has been sent,
+        And returns whether the log should be sent
+        """
+        if not self.is_typotoler_int():
+            return False,None
+        aux_t = self.getDB()[auxT]
+        last_sending = float(aux_t.find_one(desc=LastSent)['data'])
+        time_now = time.time()
+        update_gap = float(aux_t.find_one(desc=SendEvery)['data'])
+        passed_enough_time = time_now - last_sending >= update_gap
+        if not passed_enough_time:
+            logger.debug("Last sent time:{}".format(str(last_sending)))
+            logger.debug("Not enought time has passed to send new logs")
+            return False,None
+        log_t = self.getDB()[logT]
+        new_logs = log_t.find(log_t.table.columns.timestamp>last_sending) # TODO >= ?
+        logger.info("Prepared newe logs to be sent, from {} to {}".format(
+            str(last_sending),str(time_now)))
+        return True,new_logs
+        
+
+    def update_last_log_sent_time(self,sent_time=''):
+        if not sent_time:
+            sent_time = self.get_time_str()
+        self.getDB()[auxT].update(dict(desc=LastSent,data=sent_time),['desc'])
+        
+        pass # TODO
+        
     def compute_id_and_rel_entropy_for_single_typo(self, typo, t_h_id, sk):
         """
         Calculates the typo_id and relative entropy.
@@ -336,7 +384,7 @@ class UserTypoDB:
         log_t = self.getDB()[logT]
         log_t.insert(dict(
             t_id=typoID_or_msg, 
-            timestamp=ts, 
+            timestamp=float(ts), 
             edit_dist=editDist,
             top_5_fixes=isInTop5, 
             is_in_hash=isInHash,
@@ -406,7 +454,8 @@ class UserTypoDB:
         which works in linux and can be stored in the DB
         (unlike datetime.datetime, for example)
         """
-        return str(time.time())
+        # return str(time.time()) # TODO
+        return time.time()
 
     def get_entropy_stat(self, typo):
         return password_strength(typo)['entropy']
