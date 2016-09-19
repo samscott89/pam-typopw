@@ -284,6 +284,11 @@ class UserTypoDB:
                            typo[1:],
                            typo[:-1])
 
+    def get_installation_id(self):
+        if not self.is_typotoler_init():
+            raise RuntimeError("Typotoler uninitialized")
+        return self.getDB()[auxT].find_one(desc=InstallationID)['data']
+        
     def get_last_unsent_logs_iter(self):
         """
         Check what was the last time the log has been sent,

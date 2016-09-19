@@ -4,6 +4,7 @@ import pwd
 import os, sys
 import datetime
 from adaptive_typo import typo_db_access
+from subprocess import Popen
 
 # module_path = os.path.dirname(os.path.abspath(__file__))
 # CHKPW_EXE = '/sbin/unix_chkpwd'
@@ -129,7 +130,11 @@ def pam_sm_authenticate(pamh, flags, argv):
         else:
             iscorrect = on_wrong_password(typo_db, password)
 
-        if iscorrect:
+        if iscorrect: # nohup
+            Popen([ 'nohup', 'python',
+                   '/home/yuval/pam-typopw/adaptive_typo/send_typo_log.py',
+                   '&'])
+            eprint("BEFORE") # TODO REMOVE
             return pamh.PAM_SUCCESS
     return pamh.PAM_AUTH_ERR
 
