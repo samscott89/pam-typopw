@@ -117,7 +117,7 @@ class UserTypoDB:
         if not self.DB_obj:
             db_path = self.get_DB_path()
             self.DB_obj = dataset.connect("sqlite:///{}".format(db_path))
-            logger.info("connected to DB")
+            logger.info("connected to DB {}".format(db_path))
         return self.DB_obj
     
     def get_DB_path(self):
@@ -289,7 +289,7 @@ class UserTypoDB:
         Check what was the last time the log has been sent,
         And returns whether the log should be sent
         """
-        if not self.is_typotoler_int():
+        if not self.is_typotoler_init():
             return False,None
         aux_t = self.getDB()[auxT]
         last_sending = float(aux_t.find_one(desc=LastSent)['data'])
@@ -310,7 +310,7 @@ class UserTypoDB:
     def update_last_log_sent_time(self,sent_time=''):
         if not sent_time:
             sent_time = self.get_time_str()
-        self.getDB()[auxT].update(dict(desc=LastSent,data=sent_time),['desc'])
+        self.getDB()[auxT].update(dict(desc=LastSent,data=float(sent_time)),['desc'])
         
         pass # TODO
         
@@ -766,4 +766,6 @@ class UserTypoDB:
                                                             updateLog)
         self.add_top_N_typo_list_to_hash_cache(topNList, t_h_id, t_sk)
         self.clear_waitlist()
+
+
 
