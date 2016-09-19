@@ -21,11 +21,14 @@ def DB_path():
     # TODO _ for some reason it does't work
     user = get_username()
     db = UserTypoDB(user)
-    return db.get_DB_path(user)
+    return db.get_DB_path()
     #return "/home/{}/{}.db".format(get_username(), DB_NAME)
 
 def remove_DB():
-    os.remove(DB_path())
+    try:
+        os.remove(DB_path())
+    except OSError as e:
+        eprint(e)
 
 def start_DB():
     remove_DB()
@@ -153,7 +156,7 @@ def test_some_more(isStandAlone = True):
         remove_DB()
     else:
         return typoDB    
-
+'''
 def test_cache_policy(isStandAlone = True):
     # might fail under extreamly low probabiliy
     # ********* VERY HEAVY ***************
@@ -187,7 +190,7 @@ def test_cache_policy(isStandAlone = True):
         remove_DB()
     else:
         return typoDB
-
+'''
     
 def get_pw():
     return 'GoldApp&3'

@@ -1,0 +1,6 @@
+#!/bin/bash
+
+fullpath="/home/yuval/pam-typopw/testDir"
+bash ${fullpath}/longBg.sh >> ${fullpath}/longBg.out &
+echo "meanwhile"
+echo "lets sit and talk"
