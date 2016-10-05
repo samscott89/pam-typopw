@@ -5,7 +5,7 @@ from setuptools import setup
 from setuptools.command.install import install
 from subprocess import Popen, call, PIPE
 import stat
-VERSION = "0.4.6"
+VERSION = "0.4.7"
 GITHUB_URL = 'https://github.com/rchatterjee/pam-typopw' # URL in github repo
 BINDIR = '/usr/local/bin'
 SEC_DB_PATH = '/etc/adaptive_typo'
@@ -106,7 +106,7 @@ setup(
     install_requires=[
         'joblib',
         'pycryptodome',
-        'word2keypress',
+        'word2keypress==1.0.4',
         'dataset',
         'zxcvbn',
         'requests'
