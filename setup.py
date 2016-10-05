@@ -53,7 +53,7 @@ class CustomInstaller(install):
         assert os.getuid() == 0, "You need root priviledge to run the installation"
         if not os.path.exists(BINDIR):
             os.mkdirs(path=BINDIR, mode=0755) # drwxr-xr-x
-        call(['apt-get', 'install'] + LIB_DEPENDENCIES)
+        call(['apt-get', 'install', '-y'] + LIB_DEPENDENCIES)
         call(['gcc', 'chkpw.c', '-o', '{}/chkpw'.format(BINDIR), '-lcrypt'])
         # Assuming there is a unix_chkpwd
         p = Popen('which unix_chkpwd'.split(), stdout=PIPE)
