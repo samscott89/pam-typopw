@@ -1,4 +1,4 @@
-VERSION = "1.2.7"
+VERSION = "1.2.8.1"
 DB_NAME = ".typoToler"
 SEC_DB_PATH = '/etc/pam_typtop'
 SEC_DB_NAME = DB_NAME + ".ro" # READ_ONLY // ROOT_ONLY
